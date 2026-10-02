@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kalori : Contá tus calorías</title>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { background-color: #0c0c0c; color: #ffffff; font-family: system-ui, -apple-system, sans-serif; }
+    .font-serif-custom { font-family: Georgia, Cambria, "Times New Roman", Times, serif; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useRef, useEffect } = React;
+
+    const initialFoods = [
+      { id: '1', name: 'Frutilla', brand: 'Genérico', kcal: 44, protein: 0.9, carbs: 10, fat: 0.4, baseGrams: 136, icon: '🍓' },
+      { id: '2', name: 'Yogur Bebible Frutilla', brand: 'Ilolay', kcal: 155, protein: 6, carbs: 25, fat: 3, baseGrams: 250, icon: '🥛' },
+      { id: '3', name: 'Banana', brand: 'Genérico', kcal: 226, protein: 2.8, carbs: 58, fat: 0.8, baseGrams: 254, icon: '🍌' },
+      { id: '4', name: 'Huevo Hervido', brand: 'Genérico', kcal: 103, protein: 9.2, carbs: 0.8, fat: 7.2, baseGrams: 72, icon: '🥚' },
+      { id: '5', name: 'Leche Fresca', brand: 'Armonía', kcal: 147, protein: 8, carbs: 12, fat: 7, baseGrams: 294, icon: '🥛' },
+      { id: '6', name: 'Pechuga de Pollo', brand: 'Genérico', kcal: 165, protein: 31, carbs: 0, fat: 3.6, baseGrams: 100, icon: '🍗' },
+      { id: '7', name: 'Arroz Cocido', brand: 'Genérico', kcal: 130, protein: 2.7, carbs: 28, fat: 0.3, baseGrams: 100, icon: '🍚' }
+    ];
+
+    function App() {
+      const [activeTab, setActiveTab] = useState('hoy');
+      const [selectedMeal, setSelectedMeal] = useState('Desayuno');
+      const [showSearch, setShowSearch] = useState(false);
+      const [showCamera, setShowCamera] = useState(false);
+      const [searchTerm, setSearchTerm] = useState('');
+      const [water, setWater] = useState(0);
+      const [waterGoal] = useState(2400);
+      const [activeMenuMeal, setActiveMenuMeal] = useState(null);
+      const [selectedFoodForDetail, setSelectedFoodForDetail] = useState(null);
+      
+      const [portionQty, setPortionQty] = useState(136);
+      const [portionUnit, setPortionUnit] = useState('gramos');
+      const [targetMeal, setTargetMeal] = useState('Desayuno');
+      const [showUnitMenu, setShowUnitMenu] = useState(false);
+
+      const [mealsData, setMealsData] = useState({
+        Desayuno: [],
+        Almuerzo: [],
+        Merienda: [],
+        Cena: [],
+        'Snack 1': []
+      });
+
+      const videoRef = useRef(null);
+
+      useEffect(() => {
+        let stream = null;
+        if (showCamera) {
+          navigator.mediaDevices?.getUserMedia({ video: { facingMode: 'environment' } })
+            .then(s => {
+              stream = s;
+              if (videoRef.current) videoRef.current.srcObject = s;
+            })
+            .catch(() => {});
+        }
+        return () => {
+          if (stream) stream.getTracks().forEach(track => track.stop());
+        };
+      }, [showCamera]);
+
+      const calculateTotals = () => {
+        let totalKcal = 0, totalP = 0, totalC = 0, totalF = 0;
+        Object.values(mealsData).flatMap(m => m).forEach(item => {
+          totalKcal += item.kcal;
+          totalP += item.protein;
+          totalC += item.carbs;
+          totalF += item.fat;
+        });
+        return {
+          kcal: Math.round(totalKcal),
+          protein: Math.round(totalP),
+          carbs: Math.round(totalC),
+          fat: Math.round(totalF)
+        };
+      };
+
+      const totals = calculateTotals();
+      const goalKcal = 1715;
+      const remKcal = Math.max(0, goalKcal - totals.kcal);
+
+      const handleOpenDetail = (food, meal = 'Desayuno') => {
+        setSelectedFoodForDetail(food);
+        setPortionQty(food.baseGrams || 100);
+        setPortionUnit('gramos');
+        setTargetMeal(meal);
+      };
+
+      const handleConfirmAddFood = () => {
+        if (!selectedFoodForDetail) return;
+        const ratio = portionQty / (selectedFoodForDetail.baseGrams || 100);
+        const newItem = {
+          ...selectedFoodForDetail,
+          id: Date.now().toString(),
+          grams: portionQty,
+          kcal: Math.round(selectedFoodForDetail.kcal * ratio),
+          protein: Math.round(selectedFoodForDetail.protein * ratio * 10) / 10,
+          carbs: Math.round(selectedFoodForDetail.carbs * ratio * 10) / 10,
+          fat: Math.round(selectedFoodForDetail.fat * ratio * 10) / 10
+        };
+
+        setMealsData(prev => ({
+          ...prev,
+          [targetMeal]: [...prev[targetMeal], newItem]
+        }));
+
+        setSelectedFoodForDetail(null);
+        setShowSearch(false);
+        setShowCamera(false);
+      };
+
+      const handleClearMeal = (mealName) => {
+        setMealsData(prev => ({ ...prev, [mealName]: [] }));
+        setActiveMenuMeal(null);
+      };
+
+      return (
+        <div className="max-w-md mx-auto min-h-screen bg-[#0c0c0c] text-white flex flex-col justify-between pb-20 relative select-none">
+          {/* Header Superior */}
+          <header className="p-4 pt-6">
+            <div className="flex justify-between items-center text-xs text-gray-400 font-medium mb-3">
+              <span className="tracking-widest uppercase text-[#8ea885] font-bold">KALORI</span>
+              <div className="flex items-center gap-3 bg-[#181818] px-3 py-1 rounded-full text-gray-300">
+                <span>&lt;</span>
+                <span className="text-white font-semibold">Hoy</span>
+                <span>&gt;</span>
+              </div>
+            </div>
+            <h1 className="text-3xl font-serif-custom font-normal tracking-tight mb-4">Buenas noches, Juli</h1>
+
+            {/* Días de la semana */}
+            <div className="flex justify-between text-center text-xs text-gray-400 mb-6">
+              {['L','M','M','J','V','S','D'].map((d, i) => (
+                <div key={i} className="flex flex-col items-center gap-1">
+                  <span className={i === 0 ? "w-7 h-7 rounded-full bg-white text-black font-bold flex items-center justify-center" : ""}>{d}</span>
+                  <span className="text-[10px]">{28 + i}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Tarjeta de Resumen */}
+            <div className="bg-[#161616] rounded-3xl p-6 border border-[#222222] shadow-xl">
+              <div className="flex items-center justify-between">
+                <div className="relative w-36 h-36 flex items-center justify-center">
+                  <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
+                    <path className="text-gray-800" strokeWidth="3" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                    <path className="text-[#8ea885]" strokeDasharray={`${Math.min(100, (totals.kcal / goalKcal) * 100)}, 100`} strokeWidth="3" strokeLinecap="round" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                  </svg>
+                  <div className="absolute flex flex-col items-center">
+                    <span className="text-3xl font-serif-custom font-bold">{remKcal}</span>
+                    <span className="text-[11px] text-gray-400">restantes</span>
+                  </div>
+                </div>
+
+                <div className="flex-1 ml-6 flex flex-col gap-3">
+                  <div className="flex justify-between text-xs mb-1">
+                    <span className="text-gray-400 font-medium">Consumidas</span>
+                    <span className="font-semibold">{totals.kcal} / {goalKcal} kcal</span>
+                  </div>
+                  {[
+                    { label: 'Proteína', val: totals.protein, max: 122 },
+                    { label: 'Carbos', val: totals.carbs, max: 192 },
+                    { label: 'Grasas', val: totals.fat, max: 51 }
+                  ].map((m, idx) => (
+                    <div key={idx} className="space-y-1">
+                      <div className="flex justify-between text-[11px]">
+                        <span className="text-gray-400">{m.label}</span>
+                        <span>{m.val}/{m.max} g</span>
+                      </div>
+                      <div className="h-1.5 w-full bg-[#262626] rounded-full overflow-hidden">
+                        <div className="h-full bg-[#8ea885] rounded-full" style={{ width: `${Math.min(100, (m.val / m.max) * 100)}%` }}></div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Tracker de Agua */}
+            <div className="bg-[#161616] rounded-3xl p-5 mt-4 border border-[#222222]">
+              <div className="flex justify-between items-center mb-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-blue-400">💧</span>
+                  <span className="font-serif-custom text-lg">Agua</span>
+                </div>
+                <span className="text-xs text-gray-400">{(water / 1000).toFixed(2)} / {(waterGoal / 1000).toFixed(1)} L</span>
+              </div>
+              <div className="h-2 w-full bg-[#262626] rounded-full overflow-hidden mb-4">
+                <div className="h-full bg-blue-500 rounded-full transition-all duration-300" style={{ width: `${Math.min(100, (water / waterGoal) * 100)}%` }}></div>
+              </div>
+              <div className="flex gap-3">
+                <button onClick={() => setWater(w => w + 250)} className="flex-1 py-2.5 bg-[#222222] hover:bg-[#2a2a2a] rounded-2xl text-xs font-semibold text-gray-200 border border-[#333]">
+                  +250 ml
+                </button>
+                <button onClick={() => setWater(w => w + 500)} className="flex-1 py-2.5 bg-[#222222] hover:bg-[#2a2a2a] rounded-2xl text-xs font-semibold text-gray-200 border border-[#333]">
+                  +500 ml
+                </button>
+              </div>
+            </div>
+
+            {/* Listado de Comidas */}
+            <div className="mt-6 space-y-4">
+              {['Desayuno', 'Almuerzo', 'Merienda', 'Cena', 'Snack 1'].map((mealName) => {
+                const items = mealsData[mealName] || [];
+                const mealKcal = items.reduce((a, b) => a + b.kcal, 0);
+                const mealP = items.reduce((a, b) => a + b.protein, 0);
+                const mealC = items.reduce((a, b) => a + b.carbs, 0);
+                const mealF = items.reduce((a, b) => a + b.fat, 0);
+
+                return (
+                  <div key={mealName} className="bg-[#161616] rounded-3xl p-5 border border-[#222222] relative">
+                    <div className="flex justify-between items-start mb-2">
+                      <div>
+                        <h3 className="text-lg font-serif-custom">{mealName}</h3>
+                        <p className="text-xs text-gray-400 mt-0.5">
+                          {mealKcal} kcal • {mealP}P | {mealC}C | {mealF}G
+                        </p>
+                      </div>
+                      <button onClick={() => setActiveMenuMeal(activeMenuMeal === mealName ? null : mealName)} className="text-gray-400 hover:text-white p-1">
+                        •••
+                      </button>
+                    </div>
+
+                    {/* Menú desplegable (...) */}
+                    {activeMenuMeal === mealName && (
+                      <div className="absolute right-4 top-12 z-30 bg-[#1f1f1f] border border-[#333] rounded-2xl py-2 w-52 shadow-2xl backdrop-blur-md">
+                        <button className="w-full text-left px-4 py-2 text-xs hover:bg-[#2a2a2a] flex justify-between">
+                          <span>Copiar</span> <span>📋</span>
+                        </button>
+                        <button className="w-full text-left px-4 py-2 text-xs hover:bg-[#2a2a2a] text-gray-500 flex justify-between cursor-not-allowed">
+                          <span>Pegar</span> <span>📋</span>
+                        </button>
+                        <button className="w-full text-left px-4 py-2 text-xs hover:bg-[#2a2a2a] flex justify-between">
+                          <span>Repetir Comida</span> <span>♾️</span>
+                        </button>
+                        <button onClick={() => handleClearMeal(mealName)} className="w-full text-left px-4 py-2 text-xs hover:bg-[#2a2a2a] text-red-400 flex justify-between">
+                          <span>Vaciar comida</span> <span>🗑️</span>
+                        </button>
+                        <button className="w-full text-left px-4 py-2 text-xs hover:bg-[#2a2a2a] flex justify-between">
+                          <span>Ajustar porciones</span> <span>🤏</span>
+                        </button>
+                        <button className="w-full text-left px-4 py-2 text-xs hover:bg-[#2a2a2a] flex justify-between">
+                          <span>Guardar como Receta</span> <span>📖</span>
+                        </button>
+                        <button className="w-full text-left px-4 py-2 text-xs hover:bg-[#2a2a2a] flex justify-between">
+                          <span>Compartir comida</span> <span>📤</span>
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Items Agregados */}
+                    {items.length > 0 ? (
+                      <div className="my-3 space-y-2 border-t border-[#262626] pt-3">
+                        {items.map((item) => (
+                          <div key={item.id} className="flex justify-between items-center text-xs">
+                            <span className="text-gray-200">{item.icon} {item.name} ({item.grams}g)</span>
+                            <span className="font-semibold text-gray-300">{item.kcal} kcal</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-gray-500 my-3">Todavía vacío. Sumá algo.</p>
+                    )}
+
+                    <button 
+                      onClick={() => { setSelectedMeal(mealName); setShowSearch(true); }}
+                      className="w-full py-2.5 bg-[#222222] hover:bg-[#2a2a2a] rounded-2xl flex items-center justify-center text-gray-300 font-bold text-lg"
+                    >
+                      +
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </header>
+
+          {/* Navegación Inferior */}
+          <nav className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-[#0c0c0c]/90 backdrop-blur-md border-t border-[#222] flex justify-around items-center py-3 px-2 z-20">
+            <button onClick={() => setActiveTab('hoy')} className={`flex flex-col items-center gap-1 ${activeTab === 'hoy' ? 'text-[#8ea885]' : 'text-gray-500'}`}>
+              <span className="text-lg">🏠</span>
+              <span className="text-[10px]">Hoy</span>
+            </button>
+            <button onClick={() => setShowCamera(true)} className="flex flex-col items-center justify-center w-12 h-12 bg-[#8ea885] text-black rounded-full font-bold shadow-lg">
+              <span>📷</span>
+            </button>
+            <button onClick={() => setActiveTab('progreso')} className={`flex flex-col items-center gap-1 ${activeTab === 'progreso' ? 'text-[#8ea885]' : 'text-gray-500'}`}>
+              <span className="text-lg">📊</span>
+              <span className="text-[10px]">Progreso</span>
+            </button>
+            <button onClick={() => setActiveTab('perfil')} className={`flex flex-col items-center gap-1 ${activeTab === 'perfil' ? 'text-[#8ea885]' : 'text-gray-500'}`}>
+              <span className="text-lg">👤</span>
+              <span className="text-[10px]">Perfil</span>
+            </button>
+          </nav>
+
+          {/* MODAL: Buscador */}
+          {showSearch && (
+            <div className="fixed inset-0 z-40 bg-[#0c0c0c] flex flex-col p-4 max-w-md mx-auto">
+              <div className="flex items-center gap-3 mb-4">
+                <button onClick={() => setShowSearch(false)} className="text-xl">←</button>
+                <input 
+                  type="text" 
+                  placeholder="Buscar alimentos en Kalori..." 
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="flex-1 bg-[#1a1a1a] border border-[#333] rounded-full px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#8ea885]"
+                />
+              </div>
+
+              <div className="flex border-b border-[#262626] mb-4 text-sm font-medium text-gray-400">
+                <span className="pb-2 border-b-2 border-white text-white px-2">Base de Datos</span>
+                <span className="pb-2 px-4">Favoritos</span>
+                <span className="pb-2 px-4">Creados</span>
+              </div>
+
+              <div className="flex-1 overflow-y-auto space-y-3">
+                <h4 className="text-xs text-gray-500 uppercase tracking-wider font-semibold mb-2">Ingresado Recientemente</h4>
+                {initialFoods
+                  .filter(f => f.name.toLowerCase().includes(searchTerm.toLowerCase()))
+                  .map(food => (
+                    <div 
+                      key={food.id}
+                      onClick={() => handleOpenDetail(food, selectedMeal)}
+                      className="p-3 bg-[#161616] rounded-2xl border border-[#222] flex items-center justify-between cursor-pointer hover:bg-[#202020]"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-2xl">{food.icon}</span>
+                        <div>
+                          <div className="font-medium text-sm flex items-center gap-1">
+                            {food.name} <span className="text-[10px] text-green-400">✔</span>
+                          </div>
+                          <div className="text-xs text-gray-400">{food.brand}</div>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-xs text-gray-300 font-semibold">{food.baseGrams} g</div>
+                        <div className="text-xs text-gray-400">{food.kcal} kcal</div>
+                      </div>
+                    </div>
+                  ))}
+
+                {searchTerm && (
+                  <button 
+                    onClick={() => handleOpenDetail({ id: Date.now().toString(), name: searchTerm, brand: 'Generado', kcal: 120, protein: 5, carbs: 15, fat: 2, baseGrams: 100, icon: '🍽️' }, selectedMeal)}
+                    className="w-full p-3 bg-[#1a2e1a] border border-[#8ea885]/40 rounded-2xl text-xs text-green-300 font-semibold"
+                  >
+                    + Agregar "{searchTerm}" automáticamente
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* MODAL: Cámara en Vivo */}
+          {showCamera && (
+            <div className="fixed inset-0 z-50 bg-black flex flex-col justify-between max-w-md mx-auto">
+              <div className="p-4 flex justify-between items-center z-10">
+                <button onClick={() => setShowCamera(false)} className="text-white text-2xl">✕</button>
+                <span className="text-xs font-semibold bg-black/60 px-3 py-1 rounded-full">Escanea tu plato o código</span>
+                <div className="w-6"></div>
+              </div>
+
+              <div className="relative flex-1 flex items-center justify-center overflow-hidden">
+                <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover"></video>
+                <div className="absolute w-64 h-64 border-2 border-white/80 rounded-3xl pointer-events-none"></div>
+              </div>
+
+              <div className="p-6 bg-[#0c0c0c] flex flex-col gap-4 items-center">
+                <div className="flex gap-4 text-xs">
+                  <span className="bg-[#222] px-4 py-1.5 rounded-full font-semibold">Foto</span>
+                  <span className="text-gray-500 px-4 py-1.5">Código</span>
+                </div>
+                <button 
+                  onClick={() => handleOpenDetail(initialFoods[0], selectedMeal)}
+                  className="w-16 h-16 bg-[#8ea885] rounded-full flex items-center justify-center text-black text-2xl font-bold shadow-lg"
+                >
+                  📸
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* MODAL: Detalle de Alimento y Ajuste de Porciones */}
+          {selectedFoodForDetail && (
+            <div className="fixed inset-0 z-50 bg-[#0c0c0c] flex flex-col p-4 max-w-md mx-auto overflow-y-auto">
+              <div className="flex justify-between items-center mb-4">
+                <button onClick={() => setSelectedFoodForDetail(null)} className="text-xl">←</button>
+                <div className="flex gap-4 text-lg">
+                  <span>🤍</span>
+                  <span>📤</span>
+                  <span>•••</span>
+                </div>
+              </div>
+
+              <div className="flex flex-col items-center text-center my-2">
+                <div className="w-16 h-16 bg-[#1a1a1a] rounded-2xl flex items-center justify-center text-3xl mb-2">
+                  {selectedFoodForDetail.icon}
+                </div>
+                <h2 className="text-xl font-bold flex items-center gap-1">
+                  {selectedFoodForDetail.name} <span className="text-xs text-green-400">✔</span>
+                </h2>
+                <p className="text-xs text-gray-400">{selectedFoodForDetail.brand}</p>
+                <p className="text-xs text-gray-500 mt-1">Datos por {portionQty} g</p>
+              </div>
+
+              {(() => {
+                const ratio = portionQty / (selectedFoodForDetail.baseGrams || 100);
+                const k = Math.round(selectedFoodForDetail.kcal * ratio);
+                const p = (selectedFoodForDetail.protein * ratio).toFixed(1);
+                const c = (selectedFoodForDetail.carbs * ratio).toFixed(1);
+                const f = (selectedFoodForDetail.fat * ratio).toFixed(1);
+
+                return (
+                  <div>
+                    <div className="grid grid-cols-4 gap-2 my-4">
+                      <div className="bg-[#161616] p-3 rounded-2xl text-center border border-[#222]">
+                        <div className="text-base font-bold">{k}</div>
+                        <div className="text-[10px] text-gray-400">kcal</div>
+                      </div>
+                      <div className="bg-[#161616] p-3 rounded-2xl text-center border border-[#222]">
+                        <div className="text-base font-bold">{p} g</div>
+                        <div className="text-[10px] text-gray-400">proteínas</div>
+                      </div>
+                      <div className="bg-[#161616] p-3 rounded-2xl text-center border border-[#222]">
+                        <div className="text-base font-bold">{c} g</div>
+                        <div className="text-[10px] text-gray-400">carbs</div>
+                      </div>
+                      <div className="bg-[#161616] p-3 rounded-2xl text-center border border-[#222]">
+                        <div className="text-base font-bold">{f} g</div>
+                        <div className="text-[10px] text-gray-400">grasas</div>
+                      </div>
+                    </div>
+
+                    <div className="bg-[#1a1a1a] p-3 rounded-2xl my-3 text-center text-xs font-semibold text-purple-300 border border-purple-900/40">
+                      ✨ Analizar con Kalori AI
+                    </div>
+
+                    <div className="bg-[#161616] p-4 rounded-2xl border border-[#222] my-4 space-y-4 relative">
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs text-gray-400">Unidad de medida</span>
+                        <button 
+                          onClick={() => setShowUnitMenu(!showUnitMenu)} 
+                          className="bg-[#222] px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1"
+                        >
+                          {portionUnit} <span>▼</span>
+                        </button>
+                      </div>
+
+                      {showUnitMenu && (
+                        <div className="absolute right-4 top-12 z-50 bg-[#222] border border-[#333] rounded-2xl py-2 w-48 shadow-2xl text-xs space-y-1">
+                          <button onClick={() => { setPortionQty(150); setPortionUnit('taza (150 g)'); setShowUnitMenu(false); }} className="w-full text-left px-4 py-2 hover:bg-[#333]">taza (150 g)</button>
+                          <button onClick={() => { setPortionQty(12); setPortionUnit('unidad (12 g)'); setShowUnitMenu(false); }} className="w-full text-left px-4 py-2 hover:bg-[#333]">unidad (12 g)</button>
+                          <button onClick={() => { setPortionUnit('gramos'); setShowUnitMenu(false); }} className="w-full text-left px-4 py-2 hover:bg-[#333]">gramos</button>
+                          <button onClick={() => { setPortionQty(28); setPortionUnit('onzas'); setShowUnitMenu(false); }} className="w-full text-left px-4 py-2 hover:bg-[#333]">onzas</button>
+                        </div>
+                      )}
+
+                      <div className="flex justify-between items-center pt-2 border-t border-[#222]">
+                        <span className="text-xs text-gray-400">Cantidad (Gramos)</span>
+                        <input 
+                          type="number" 
+                          value={portionQty} 
+                          onChange={(e) => setPortionQty(Number(e.target.value) || 0)}
+                          className="w-20 bg-[#222] border border-[#333] rounded-xl px-3 py-1 text-right text-sm font-bold text-white"
+                        />
+                      </div>
+                    </div>
+
+                    <button 
+                      onClick={handleConfirmAddFood}
+                      className="w-full py-4 bg-[#eab308] hover:bg-[#d97706] text-black font-bold text-sm rounded-full shadow-lg transition-colors mt-4"
+                    >
+                      Agregar a {targetMeal}
+                    </button>
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
