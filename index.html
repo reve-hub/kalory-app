@@ -8,6 +8,8 @@
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Librería para lectura de código de barras -->
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <style>
     body { background-color: #0c0c0c; color: #ffffff; font-family: system-ui, -apple-system, sans-serif; }
     .font-serif-custom { font-family: Georgia, Cambria, "Times New Roman", Times, serif; }
@@ -22,28 +24,13 @@
     const localFoods = [
       { id: '1', name: 'Papa hervida / al horno', brand: 'Genérico', kcal: 87, protein: 1.9, carbs: 20.1, fat: 0.1, baseGrams: 100, icon: '🥔' },
       { id: '2', name: 'Papa frita', brand: 'Genérico', kcal: 312, protein: 3.4, carbs: 41, fat: 15, baseGrams: 100, icon: '🍟' },
-      { id: '3', name: 'Batata / Camote', brand: 'Genérico', kcal: 86, protein: 1.6, carbs: 20, fat: 0.1, baseGrams: 100, icon: '🍠' },
+      { id: '3', name: 'Galletitas Dulces / Saladas', brand: 'Genérico', kcal: 450, protein: 7, carbs: 65, fat: 18, baseGrams: 100, icon: '🍪' },
       { id: '4', name: 'Pechuga de Pollo', brand: 'Cocida', kcal: 165, protein: 31, carbs: 0, fat: 3.6, baseGrams: 100, icon: '🍗' },
       { id: '5', name: 'Carne Vacuna / Bife', brand: 'Magra', kcal: 250, protein: 26, carbs: 0, fat: 15, baseGrams: 100, icon: '🥩' },
-      { id: '6', name: 'Carne Molida Magra', brand: 'Genérico', kcal: 215, protein: 20, carbs: 0, fat: 14, baseGrams: 100, icon: '🥩' },
-      { id: '7', name: 'Milanesa de Carne', brand: 'Al horno', kcal: 220, protein: 22, carbs: 15, fat: 8, baseGrams: 100, icon: '🥩' },
-      { id: '8', name: 'Milanesa de Pollo', brand: 'Al horno', kcal: 210, protein: 24, carbs: 14, fat: 7, baseGrams: 100, icon: '🍗' },
-      { id: '9', name: 'Huevo hervido', brand: 'Unidad (50g env.)', kcal: 155, protein: 13, carbs: 1.1, fat: 11, baseGrams: 100, icon: '🥚' },
-      { id: '10', name: 'Arroz Blanco Cocido', brand: 'Genérico', kcal: 130, protein: 2.7, carbs: 28, fat: 0.3, baseGrams: 100, icon: '🍚' },
-      { id: '11', name: 'Fideos / Pasta Cocida', brand: 'Genérico', kcal: 158, protein: 5.8, carbs: 31, fat: 0.9, baseGrams: 100, icon: '🍝' },
-      { id: '12', name: 'Pan Lactal Blanco', brand: 'Común', kcal: 265, protein: 9, carbs: 49, fat: 3.2, baseGrams: 100, icon: '🍞' },
-      { id: '13', name: 'Pan Integral', brand: 'Genérico', kcal: 247, protein: 12, carbs: 41, fat: 3.4, baseGrams: 100, icon: '🍞' },
-      { id: '14', name: 'Banana', brand: 'Fresca', kcal: 89, protein: 1.1, carbs: 22.8, fat: 0.3, baseGrams: 100, icon: '🍌' },
-      { id: '15', name: 'Manzana', brand: 'Fresca', kcal: 52, protein: 0.3, carbs: 13.8, fat: 0.2, baseGrams: 100, icon: '🍎' },
-      { id: '16', name: 'Frutilla', brand: 'Fresca', kcal: 32, protein: 0.7, carbs: 7.7, fat: 0.3, baseGrams: 100, icon: '🍓' },
-      { id: '17', name: 'Avena en Copos', brand: 'Instantánea', kcal: 389, protein: 16.9, carbs: 66, fat: 6.9, baseGrams: 100, icon: '🥣' },
-      { id: '18', name: 'Leche Entera', brand: 'Genérico', kcal: 60, protein: 3.2, carbs: 4.8, fat: 3.2, baseGrams: 100, icon: '🥛' },
-      { id: '19', name: 'Leche Descremada', brand: 'Genérico', kcal: 35, protein: 3.4, carbs: 5, fat: 0.1, baseGrams: 100, icon: '🥛' },
-      { id: '20', name: 'Yogur Entero', brand: 'Genérico', kcal: 61, protein: 3.5, carbs: 4.7, fat: 3.3, baseGrams: 100, icon: '🥛' },
-      { id: '21', name: 'Queso Cream / Untable', brand: 'Genérico', kcal: 240, protein: 7, carbs: 4, fat: 22, baseGrams: 100, icon: '🧀' },
-      { id: '22', name: 'Atún al agua', brand: 'Lata escurrida', kcal: 116, protein: 26, carbs: 0, fat: 1, baseGrams: 100, icon: '🐟' },
-      { id: '23', name: 'Manteca', brand: 'Común', kcal: 717, protein: 0.9, carbs: 0.1, fat: 81, baseGrams: 100, icon: '🧈' },
-      { id: '24', name: 'Aceite de Oliva', brand: 'Genérico', kcal: 884, protein: 0, carbs: 0, fat: 100, baseGrams: 100, icon: '🫒' }
+      { id: '6', name: 'Huevo hervido', brand: 'Unidad', kcal: 155, protein: 13, carbs: 1.1, fat: 11, baseGrams: 100, icon: '🥚' },
+      { id: '7', name: 'Arroz Blanco Cocido', brand: 'Genérico', kcal: 130, protein: 2.7, carbs: 28, fat: 0.3, baseGrams: 100, icon: '🍚' },
+      { id: '8', name: 'Banana', brand: 'Fresca', kcal: 89, protein: 1.1, carbs: 22.8, fat: 0.3, baseGrams: 100, icon: '🍌' },
+      { id: '9', name: 'Manzana', brand: 'Fresca', kcal: 52, protein: 0.3, carbs: 13.8, fat: 0.2, baseGrams: 100, icon: '🍎' }
     ];
 
     function App() {
@@ -55,6 +42,7 @@
       const [searchTerm, setSearchTerm] = useState('');
       const [apiFoods, setApiFoods] = useState([]);
       const [loadingSearch, setLoadingSearch] = useState(false);
+      const [scanStatus, setScanStatus] = useState('');
       
       const [water, setWater] = useState(0);
       const [waterGoal, setWaterGoal] = useState(2000);
@@ -74,20 +62,60 @@
         'Snack 1': []
       });
 
-      const videoRef = useRef(null);
+      const qrScannerRef = useRef(null);
 
+      // Configuración e iniciación del escáner real de código de barras
       useEffect(() => {
-        let stream = null;
         if (showCamera) {
-          navigator.mediaDevices?.getUserMedia({ video: { facingMode: 'environment' } })
-            .then(s => {
-              stream = s;
-              if (videoRef.current) videoRef.current.srcObject = s;
-            })
-            .catch(() => {});
+          setScanStatus('Apuntá al código de barras del envase...');
+          const html5QrCode = new Html5Qrcode("reader");
+          qrScannerRef.current = html5QrCode;
+
+          html5QrCode.start(
+            { facingMode: "environment" },
+            { fps: 10, qrbox: { width: 250, height: 150 } },
+            async (decodedText) => {
+              setScanStatus(`¡Código detectado: ${decodedText}! Buscando producto...`);
+              try {
+                const res = await fetch(`https://world.openfoodfacts.org/api/v0/product/${decodedText}.json`);
+                const data = await res.json();
+                if (data.status === 1 && data.product) {
+                  const p = data.product;
+                  const foundFood = {
+                    id: p.code || Date.now().toString(),
+                    name: p.product_name || 'Producto Escaneado',
+                    brand: p.brands || 'Marca Detectada',
+                    kcal: Math.round(p.nutriments['energy-kcal_100g'] || p.nutriments['energy-kcal'] || 120),
+                    protein: Math.round((p.nutriments.proteins_100g || 0) * 10) / 10,
+                    carbs: Math.round((p.nutriments.carbohydrates_100g || 0) * 10) / 10,
+                    fat: Math.round((p.nutriments.fat_100g || 0) * 10) / 10,
+                    baseGrams: 100,
+                    icon: '📦'
+                  };
+                  html5QrCode.stop().catch(() => {});
+                  setShowCamera(false);
+                  handleOpenDetail(foundFood, selectedMeal);
+                } else {
+                  setScanStatus('Producto no encontrado en base global. Intentá buscando por nombre.');
+                }
+              } catch (err) {
+                setScanStatus('Error al buscar el código de barras.');
+              }
+            },
+            () => {}
+          ).catch(err => {
+            setScanStatus('Permiso de cámara no concedido o cámara no disponible.');
+          });
+        } else {
+          if (qrScannerRef.current) {
+            qrScannerRef.current.stop().catch(() => {});
+          }
         }
+
         return () => {
-          if (stream) stream.getTracks().forEach(track => track.stop());
+          if (qrScannerRef.current) {
+            qrScannerRef.current.stop().catch(() => {});
+          }
         };
       }, [showCamera]);
 
@@ -108,7 +136,7 @@
                 .map((p, idx) => ({
                   id: p.code || `api-${idx}`,
                   name: p.product_name,
-                  brand: p.brands || 'Marca Global',
+                  brand: p.brands || 'Marca',
                   kcal: Math.round(p.nutriments['energy-kcal_100g'] || p.nutriments['energy-kcal'] || 100),
                   protein: Math.round((p.nutriments.proteins_100g || 0) * 10) / 10,
                   carbs: Math.round((p.nutriments.carbohydrates_100g || 0) * 10) / 10,
@@ -195,7 +223,7 @@
       return (
         <div className="max-w-md mx-auto min-h-screen bg-[#0c0c0c] text-white flex flex-col justify-between pb-24 relative select-none">
           
-          {/* VISTA HOY */}
+          {/* HOY */}
           {activeTab === 'hoy' && (
             <header className="p-4 pt-6">
               <div className="flex justify-between items-center text-xs text-gray-400 font-medium mb-3">
@@ -214,7 +242,7 @@
                 <button onClick={() => setActiveTab('perfil')} className="text-xs bg-[#222] text-gray-400 px-2 py-1 rounded-lg">✏️</button>
               </div>
 
-              {/* Anillo de Calorías Consumidas (Libre / Sin Restricciones) */}
+              {/* Anillo de Resumen */}
               <div className="bg-[#161616] rounded-3xl p-6 border border-[#222222] shadow-xl">
                 <div className="flex items-center justify-between">
                   <div className="relative w-36 h-36 flex items-center justify-center">
@@ -251,7 +279,7 @@
                 </div>
               </div>
 
-              {/* Control de Agua */}
+              {/* Agua */}
               <div className="bg-[#161616] rounded-3xl p-5 mt-4 border border-[#222222]">
                 <div className="flex justify-between items-center mb-3">
                   <div className="flex items-center gap-2">
@@ -272,7 +300,7 @@
                 </div>
               </div>
 
-              {/* Secciones de Comidas tipo Fitia */}
+              {/* Comidas */}
               <div className="mt-6 space-y-4">
                 {['Desayuno', 'Almuerzo', 'Merienda', 'Cena', 'Snack 1'].map((mealName) => {
                   const items = mealsData[mealName] || [];
@@ -290,8 +318,6 @@
 
                       {activeMenuMeal === mealName && (
                         <div className="absolute right-4 top-12 z-30 bg-[#1f1f1f] border border-[#333] rounded-2xl py-2 w-52 shadow-2xl backdrop-blur-md">
-                          <button className="w-full text-left px-4 py-2 text-xs hover:bg-[#2a2a2a] flex justify-between"><span>Copiar</span> <span>📋</span></button>
-                          <button className="w-full text-left px-4 py-2 text-xs hover:bg-[#2a2a2a] flex justify-between"><span>Repetir Comida</span> <span>♾️</span></button>
                           <button onClick={() => handleClearMeal(mealName)} className="w-full text-left px-4 py-2 text-xs hover:bg-[#2a2a2a] text-red-400 flex justify-between"><span>Vaciar comida</span> <span>🗑️</span></button>
                         </div>
                       )}
@@ -322,27 +348,6 @@
             </header>
           )}
 
-          {/* VISTA PROGRESO */}
-          {activeTab === 'progreso' && (
-            <div className="p-5 pt-8">
-              <h2 className="text-2xl font-serif-custom mb-4">Registro Histórico</h2>
-              <div className="bg-[#161616] rounded-3xl p-5 border border-[#222]">
-                <p className="text-xs text-gray-400 mb-2">Total consumido hoy</p>
-                <div className="text-3xl font-bold font-serif-custom mb-4">{totals.kcal} kcal</div>
-                <div className="flex justify-between items-end h-32 pt-4 border-t border-[#262626]">
-                  {['L', 'M', 'M', 'J', 'V', 'S', 'D'].map((day, idx) => (
-                    <div key={idx} className="flex flex-col items-center gap-2">
-                      <div className="w-6 bg-[#262626] rounded-t-lg relative" style={{ height: '80px' }}>
-                        <div className="absolute bottom-0 w-full bg-[#8ea885] rounded-t-lg" style={{ height: idx === 4 ? `${Math.min(100, (totals.kcal / 2000) * 100)}%` : '0%' }}></div>
-                      </div>
-                      <span className="text-[10px] text-gray-400">{day}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
           {/* VISTA PERFIL */}
           {activeTab === 'perfil' && (
             <div className="p-5 pt-8">
@@ -371,10 +376,6 @@
               <span>📷</span>
             </button>
 
-            <button onClick={() => setActiveTab('progreso')} className={`flex flex-col items-center gap-1 ${activeTab === 'progreso' ? 'text-[#8ea885]' : 'text-gray-500'}`}>
-              <span className="text-lg">📊</span><span className="text-[10px]">Progreso</span>
-            </button>
-
             <button onClick={() => setActiveTab('perfil')} className={`flex flex-col items-center gap-1 ${activeTab === 'perfil' ? 'text-[#8ea885]' : 'text-gray-500'}`}>
               <span className="text-lg">👤</span><span className="text-[10px]">Perfil</span>
             </button>
@@ -387,7 +388,7 @@
                 <button onClick={() => setShowSearch(false)} className="text-xl">←</button>
                 <input 
                   type="text" 
-                  placeholder="Ej. papa, milanesa, huevo..." 
+                  placeholder="Ej. papa, milanesa, galletitas..." 
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="flex-1 bg-[#1a1a1a] border border-[#333] rounded-full px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#8ea885]"
@@ -396,7 +397,7 @@
 
               <div className="flex-1 overflow-y-auto space-y-3">
                 <div className="flex justify-between items-center">
-                  <h4 className="text-xs text-gray-500 uppercase tracking-wider font-semibold">Alimentos Disponibles</h4>
+                  <h4 className="text-xs text-gray-500 uppercase tracking-wider font-semibold">Alimentos Encontrados</h4>
                   {loadingSearch && <span className="text-xs text-[#8ea885] animate-pulse">Buscando marcas...</span>}
                 </div>
 
@@ -423,32 +424,31 @@
             </div>
           )}
 
-          {/* MODAL CÁMARA */}
+          {/* MODAL CÁMARA CON LECTOR DE CÓDIGO DE BARRAS REAL */}
           {showCamera && (
             <div className="fixed inset-0 z-50 bg-black flex flex-col justify-between max-w-md mx-auto">
-              <div className="p-4 flex justify-between items-center z-10">
+              <div className="p-4 flex justify-between items-center z-10 bg-black/80">
                 <button onClick={() => setShowCamera(false)} className="text-white text-2xl">✕</button>
-                <span className="text-xs font-semibold bg-black/60 px-3 py-1 rounded-full">Escanea tu plato o código</span>
+                <span className="text-xs font-semibold bg-[#222] px-3 py-1 rounded-full text-green-400">Escaner de Código de Barras</span>
                 <div className="w-6"></div>
               </div>
 
-              <div className="relative flex-1 flex items-center justify-center overflow-hidden">
-                <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover"></video>
-                <div className="absolute w-64 h-64 border-2 border-white/80 rounded-3xl pointer-events-none"></div>
+              <div className="relative flex-1 flex flex-col items-center justify-center overflow-hidden p-4">
+                <div id="reader" className="w-full max-w-sm rounded-2xl overflow-hidden border-2 border-[#8ea885]"></div>
+                <p className="text-xs text-center text-gray-300 mt-4 px-4 bg-black/60 py-2 rounded-xl">
+                  {scanStatus}
+                </p>
               </div>
 
-              <div className="p-6 bg-[#0c0c0c] flex flex-col gap-4 items-center">
-                <button 
-                  onClick={() => handleOpenDetail(localFoods[0], selectedMeal)}
-                  className="w-16 h-16 bg-[#8ea885] rounded-full flex items-center justify-center text-black text-2xl font-bold shadow-lg"
-                >
-                  📸
-                </button>
+              <div className="p-4 bg-[#0c0c0c] text-center">
+                <p className="text-xs text-gray-500">
+                  Enfocá el código de barras de cualquier producto envasado
+                </p>
               </div>
             </div>
           )}
 
-          {/* MODAL DETALLE Y PORCIONES */}
+          {/* MODAL DETALLE */}
           {selectedFoodForDetail && (
             <div className="fixed inset-0 z-50 bg-[#0c0c0c] flex flex-col p-4 max-w-md mx-auto overflow-y-auto">
               <div className="flex justify-between items-center mb-4">
@@ -521,4 +521,3 @@
   </script>
 </body>
 </html>
-
