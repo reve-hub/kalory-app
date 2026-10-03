@@ -38,11 +38,12 @@
       const [selectedMeal, setSelectedMeal] = useState('Desayuno');
       const [showSearch, setShowSearch] = useState(false);
       const [showCamera, setShowCamera] = useState(false);
-      const [cameraMode, setCameraMode] = useState('photo'); // 'photo' o 'barcode'
+      const [cameraMode, setCameraMode] = useState('photo');
       const [searchTerm, setSearchTerm] = useState('');
       const [apiFoods, setApiFoods] = useState([]);
       const [loadingSearch, setLoadingSearch] = useState(false);
       const [scanStatus, setScanStatus] = useState('');
+      const [isAnalyzingPhoto, setIsAnalyzingPhoto] = useState(false);
       
       const [water, setWater] = useState(0);
       const [waterGoal, setWaterGoal] = useState(2000);
@@ -65,7 +66,6 @@
       const videoRef = useRef(null);
       const qrScannerRef = useRef(null);
 
-      // Manejo de la cámara según el modo elegido
       useEffect(() => {
         let stream = null;
 
@@ -175,6 +175,15 @@
         return () => clearTimeout(timer);
       }, [searchTerm]);
 
+      const handleTakePhoto = () => {
+        setIsAnalyzingPhoto(true);
+        setTimeout(() => {
+          setIsAnalyzingPhoto(false);
+          setShowCamera(false);
+          setShowSearch(true);
+        }, 1200);
+      };
+
       const calculateTotals = () => {
         let totalKcal = 0, totalP = 0, totalC = 0, totalF = 0;
         Object.values(mealsData).flatMap(m => m).forEach(item => {
@@ -264,7 +273,7 @@
                 <button onClick={() => setActiveTab('perfil')} className="text-xs bg-[#222] text-gray-400 px-2 py-1 rounded-lg">✏️</button>
               </div>
 
-              {/* Anillo de Calorías */}
+              {/* Resumen */}
               <div className="bg-[#161616] rounded-3xl p-6 border border-[#222222] shadow-xl">
                 <div className="flex items-center justify-between">
                   <div className="relative w-36 h-36 flex items-center justify-center">
@@ -301,7 +310,7 @@
                 </div>
               </div>
 
-              {/* Control de Agua */}
+              {/* Agua */}
               <div className="bg-[#161616] rounded-3xl p-5 mt-4 border border-[#222222]">
                 <div className="flex justify-between items-center mb-3">
                   <div className="flex items-center gap-2">
@@ -420,7 +429,7 @@
               <div className="flex-1 overflow-y-auto space-y-3">
                 <div className="flex justify-between items-center">
                   <h4 className="text-xs text-gray-500 uppercase tracking-wider font-semibold">Alimentos Encontrados</h4>
-                  {loadingSearch && <span className="text-xs text-[#8ea885] animate-pulse">Buscando marcas...</span>}
+                  {loadingSearch && <span className="text-xs text-[#8ea885] animate-pulse">Buscando...</span>}
                 </div>
 
                 {combinedResults.map(food => (
@@ -446,7 +455,7 @@
             </div>
           )}
 
-          {/* MODAL CÁMARA DOBLE: FOTO DE PLATO + BARRAS */}
+          {/* MODAL CÁMARA */}
           {showCamera && (
             <div className="fixed inset-0 z-50 bg-black flex flex-col justify-between max-w-md mx-auto">
               <div className="p-4 flex flex-col gap-3 bg-black/90 z-10">
@@ -456,7 +465,6 @@
                   <div className="w-6"></div>
                 </div>
 
-                {/* Selector de modo */}
                 <div className="flex bg-[#1a1a1a] rounded-xl p-1 gap-1">
                   <button 
                     onClick={() => setCameraMode('photo')} 
@@ -473,17 +481,17 @@
                 </div>
               </div>
 
-              {/* Visor de Foto del plato */}
               {cameraMode === 'photo' && (
                 <div className="relative flex-1 flex flex-col items-center justify-center overflow-hidden">
                   <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover"></video>
                   <div className="absolute w-64 h-64 border-2 border-[#8ea885]/80 rounded-3xl pointer-events-none flex items-center justify-center">
-                    <span className="text-xs text-white/70 bg-black/50 px-3 py-1 rounded-full">Enfocá tu plato</span>
+                    <span className="text-xs text-white/70 bg-black/50 px-3 py-1 rounded-full">
+                      {isAnalyzingPhoto ? 'Analizando plato...' : 'Enfocá tu comida'}
+                    </span>
                   </div>
                 </div>
               )}
 
-              {/* Visor de Código de Barras */}
               {cameraMode === 'barcode' && (
                 <div className="relative flex-1 flex flex-col items-center justify-center overflow-hidden p-4">
                   <div id="reader" className="w-full max-w-sm rounded-2xl overflow-hidden border-2 border-[#8ea885]"></div>
@@ -496,13 +504,14 @@
               <div className="p-6 bg-[#0c0c0c] flex justify-center items-center">
                 {cameraMode === 'photo' ? (
                   <button 
-                    onClick={() => handleOpenDetail(localFoods[0], selectedMeal)}
+                    onClick={handleTakePhoto}
+                    disabled={isAnalyzingPhoto}
                     className="w-16 h-16 bg-[#8ea885] rounded-full flex items-center justify-center text-black text-2xl font-bold shadow-lg active:scale-95 transition-transform"
                   >
-                    📸
+                    {isAnalyzingPhoto ? '⏳' : '📸'}
                   </button>
                 ) : (
-                  <p className="text-xs text-gray-500 text-center">Apuntá al código de barras del paquete para buscar el producto</p>
+                  <p className="text-xs text-gray-500 text-center">Apuntá al código de barras del paquete</p>
                 )}
               </div>
             </div>
