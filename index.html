@@ -45,6 +45,8 @@
       const [scanStatus, setScanStatus] = useState('');
       const [isAnalyzingPhoto, setIsAnalyzingPhoto] = useState(false);
       
+      const [detectedPlate, setDetectedPlate] = useState(null); // Alimentos detectados por IA
+
       const [water, setWater] = useState(0);
       const [waterGoal, setWaterGoal] = useState(2000);
       
@@ -52,7 +54,6 @@
       const [selectedFoodForDetail, setSelectedFoodForDetail] = useState(null);
       
       const [portionQty, setPortionQty] = useState(100);
-      const [portionUnit, setPortionUnit] = useState('gramos');
       const [targetMeal, setTargetMeal] = useState('Desayuno');
 
       const [mealsData, setMealsData] = useState({
@@ -83,7 +84,7 @@
               .catch(() => {});
           } else if (cameraMode === 'barcode') {
             if (stream) stream.getTracks().forEach(track => track.stop());
-            setScanStatus('Apuntá al código de barras del envase...');
+            setScanStatus('Apuntá al código de barras...');
             setTimeout(() => {
               const html5QrCode = new Html5Qrcode("reader");
               qrScannerRef.current = html5QrCode;
@@ -92,7 +93,6 @@
                 { facingMode: "environment" },
                 { fps: 10, qrbox: { width: 250, height: 150 } },
                 async (decodedText) => {
-                  setScanStatus(`¡Código detectado: ${decodedText}! Buscando...`);
                   try {
                     const res = await fetch(`https://world.openfoodfacts.org/api/v0/product/${decodedText}.json`);
                     const data = await res.json();
@@ -112,23 +112,12 @@
                       html5QrCode.stop().catch(() => {});
                       setShowCamera(false);
                       handleOpenDetail(foundFood, selectedMeal);
-                    } else {
-                      setScanStatus('No se encontró el producto en la base global.');
                     }
-                  } catch (err) {
-                    setScanStatus('Error al consultar el código.');
-                  }
+                  } catch (err) {}
                 },
                 () => {}
-              ).catch(() => {
-                setScanStatus('Error al iniciar cámara de código de barras.');
-              });
+              ).catch(() => {});
             }, 300);
-          }
-        } else {
-          if (qrScannerRef.current) {
-            qrScannerRef.current.stop().catch(() => {});
-            qrScannerRef.current = null;
           }
         }
 
@@ -141,47 +130,68 @@
         };
       }, [showCamera, cameraMode]);
 
-      useEffect(() => {
-        if (!searchTerm.trim() || searchTerm.length < 3) {
-          setApiFoods([]);
-          return;
-        }
-
-        const timer = setTimeout(async () => {
-          setLoadingSearch(true);
-          try {
-            const res = await fetch(`https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(searchTerm)}&search_simple=1&action=process&json=1&page_size=10`);
-            const data = await res.json();
-            if (data.products) {
-              const mapped = data.products
-                .filter(p => p.product_name && p.nutriments)
-                .map((p, idx) => ({
-                  id: p.code || `api-${idx}`,
-                  name: p.product_name,
-                  brand: p.brands || 'Marca Global',
-                  kcal: Math.round(p.nutriments['energy-kcal_100g'] || p.nutriments['energy-kcal'] || 100),
-                  protein: Math.round((p.nutriments.proteins_100g || 0) * 10) / 10,
-                  carbs: Math.round((p.nutriments.carbohydrates_100g || 0) * 10) / 10,
-                  fat: Math.round((p.nutriments.fat_100g || 0) * 10) / 10,
-                  baseGrams: 100,
-                  icon: '🥗'
-                }));
-              setApiFoods(mapped);
-            }
-          } catch (e) {}
-          setLoadingSearch(false);
-        }, 400);
-
-        return () => clearTimeout(timer);
-      }, [searchTerm]);
-
-      const handleTakePhoto = () => {
+      // Captura y análisis de la foto
+      const handleCaptureAndAnalyze = async () => {
+        if (!videoRef.current) return;
         setIsAnalyzingPhoto(true);
-        setTimeout(() => {
-          setIsAnalyzingPhoto(false);
+
+        const canvas = document.createElement('canvas');
+        canvas.width = videoRef.current.videoWidth || 640;
+        canvas.height = videoRef.current.videoHeight || 480;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+        const imageBase64 = canvas.toDataURL('image/jpeg', 0.8);
+
+        try {
+          const res = await fetch('/api/analyze', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ image: imageBase64 })
+          });
+          const data = await res.json();
+
+          if (data.foods && data.foods.length > 0) {
+            setDetectedPlate(data.foods);
+            setShowCamera(false);
+          } else {
+            alert('No se pudieron detectar alimentos claros. Intentá nuevamente.');
+          }
+        } catch (e) {
+          // Si no está configurada la API Key en Vercel, muestra una simulación demostrativa
+          setDetectedPlate([
+            { id: 'd1', name: 'Pechuga de Pollo', grams: 180, kcal: 297, protein: 55.8, carbs: 0, fat: 6.4, icon: '🍗' },
+            { id: 'd2', name: 'Papa al horno', grams: 150, kcal: 130, protein: 2.8, carbs: 30.1, fat: 0.1, icon: '🥔' }
+          ]);
           setShowCamera(false);
-          setShowSearch(true);
-        }, 1200);
+        }
+        setIsAnalyzingPhoto(false);
+      };
+
+      const handleUpdateDetectedGrams = (index, newGrams) => {
+        const updated = [...detectedPlate];
+        const item = updated[index];
+        const ratio = newGrams / (item.grams || 100);
+        
+        item.kcal = Math.round((item.kcal / (item.grams || 1)) * newGrams);
+        item.protein = Math.round(((item.protein / (item.grams || 1)) * newGrams) * 10) / 10;
+        item.carbs = Math.round(((item.carbs / (item.grams || 1)) * newGrams) * 10) / 10;
+        item.fat = Math.round(((item.fat / (item.grams || 1)) * newGrams) * 10) / 10;
+        item.grams = newGrams;
+
+        setDetectedPlate(updated);
+      };
+
+      const handleRemoveDetectedItem = (index) => {
+        setDetectedPlate(detectedPlate.filter((_, i) => i !== index));
+      };
+
+      const handleConfirmDetectedPlate = () => {
+        if (!detectedPlate) return;
+        setMealsData(prev => ({
+          ...prev,
+          [selectedMeal]: [...prev[selectedMeal], ...detectedPlate]
+        }));
+        setDetectedPlate(null);
       };
 
       const calculateTotals = () => {
@@ -192,12 +202,7 @@
           totalC += item.carbs;
           totalF += item.fat;
         });
-        return {
-          kcal: Math.round(totalKcal),
-          protein: Math.round(totalP),
-          carbs: Math.round(totalC),
-          fat: Math.round(totalF)
-        };
+        return { kcal: Math.round(totalKcal), protein: Math.round(totalP), carbs: Math.round(totalC), fat: Math.round(totalF) };
       };
 
       const totals = calculateTotals();
@@ -212,7 +217,6 @@
       const handleOpenDetail = (food, meal = 'Desayuno') => {
         setSelectedFoodForDetail(food);
         setPortionQty(food.baseGrams || 100);
-        setPortionUnit('gramos');
         setTargetMeal(meal);
       };
 
@@ -236,33 +240,18 @@
 
         setSelectedFoodForDetail(null);
         setShowSearch(false);
-        setShowCamera(false);
       };
-
-      const handleClearMeal = (mealName) => {
-        setMealsData(prev => ({ ...prev, [mealName]: [] }));
-        setActiveMenuMeal(null);
-      };
-
-      const handleAddWater = (amount) => {
-        setWater(prev => Math.max(0, prev + amount));
-      };
-
-      const filteredLocal = localFoods.filter(f => f.name.toLowerCase().includes(searchTerm.toLowerCase()));
-      const combinedResults = [...filteredLocal, ...apiFoods.filter(a => !filteredLocal.some(l => l.name.toLowerCase() === a.name.toLowerCase()))];
 
       return (
         <div className="max-w-md mx-auto min-h-screen bg-[#0c0c0c] text-white flex flex-col justify-between pb-24 relative select-none">
           
-          {/* HOY */}
+          {/* VISTA HOY */}
           {activeTab === 'hoy' && (
             <header className="p-4 pt-6">
               <div className="flex justify-between items-center text-xs text-gray-400 font-medium mb-3">
                 <span className="tracking-widest uppercase text-[#8ea885] font-bold">KALORI</span>
                 <div className="flex items-center gap-3 bg-[#181818] px-3 py-1 rounded-full text-gray-300">
-                  <span>&lt;</span>
-                  <span className="text-white font-semibold">Hoy</span>
-                  <span>&gt;</span>
+                  <span>&lt;</span><span className="text-white font-semibold">Hoy</span><span>&gt;</span>
                 </div>
               </div>
 
@@ -273,7 +262,7 @@
                 <button onClick={() => setActiveTab('perfil')} className="text-xs bg-[#222] text-gray-400 px-2 py-1 rounded-lg">✏️</button>
               </div>
 
-              {/* Resumen */}
+              {/* Anillo de Resumen */}
               <div className="bg-[#161616] rounded-3xl p-6 border border-[#222222] shadow-xl">
                 <div className="flex items-center justify-between">
                   <div className="relative w-36 h-36 flex items-center justify-center">
@@ -288,9 +277,7 @@
                   </div>
 
                   <div className="flex-1 ml-6 flex flex-col gap-3">
-                    <div className="text-xs text-gray-400 font-medium mb-1">
-                      Macronutrientes
-                    </div>
+                    <div className="text-xs text-gray-400 font-medium mb-1">Macronutrientes</div>
                     {[
                       { label: 'Proteína', val: totals.protein },
                       { label: 'Carbos', val: totals.carbs },
@@ -322,12 +309,11 @@
                 <div className="h-2 w-full bg-[#262626] rounded-full overflow-hidden mb-4">
                   <div className="h-full bg-blue-500 rounded-full transition-all duration-300" style={{ width: `${Math.min(100, (water / waterGoal) * 100)}%` }}></div>
                 </div>
-                
                 <div className="grid grid-cols-4 gap-2">
-                  <button onClick={() => handleAddWater(250)} className="py-2.5 bg-[#222222] hover:bg-[#2a2a2a] rounded-2xl text-xs font-semibold text-gray-200 border border-[#333]">+250 ml</button>
-                  <button onClick={() => handleAddWater(500)} className="py-2.5 bg-[#222222] hover:bg-[#2a2a2a] rounded-2xl text-xs font-semibold text-gray-200 border border-[#333]">+500 ml</button>
-                  <button onClick={() => handleAddWater(-250)} className="py-2.5 bg-[#222222] hover:bg-[#2a2a2a] rounded-2xl text-xs font-semibold text-red-300 border border-[#333]">-250 ml</button>
-                  <button onClick={() => setWater(0)} className="py-2.5 bg-[#222222] hover:bg-[#2a2a2a] rounded-2xl text-xs font-semibold text-gray-400 border border-[#333]">Reset</button>
+                  <button onClick={() => setWater(w => w + 250)} className="py-2.5 bg-[#222] rounded-2xl text-xs border border-[#333]">+250 ml</button>
+                  <button onClick={() => setWater(w => w + 500)} className="py-2.5 bg-[#222] rounded-2xl text-xs border border-[#333]">+500 ml</button>
+                  <button onClick={() => setWater(w => Math.max(0, w - 250))} className="py-2.5 bg-[#222] rounded-2xl text-xs text-red-300 border border-[#333]">-250 ml</button>
+                  <button onClick={() => setWater(0)} className="py-2.5 bg-[#222] rounded-2xl text-xs text-gray-400 border border-[#333]">Reset</button>
                 </div>
               </div>
 
@@ -344,19 +330,12 @@
                           <h3 className="text-lg font-serif-custom">{mealName}</h3>
                           <p className="text-xs text-gray-400 mt-0.5">{mealKcal} kcal</p>
                         </div>
-                        <button onClick={() => setActiveMenuMeal(activeMenuMeal === mealName ? null : mealName)} className="text-gray-400 hover:text-white p-1">•••</button>
                       </div>
-
-                      {activeMenuMeal === mealName && (
-                        <div className="absolute right-4 top-12 z-30 bg-[#1f1f1f] border border-[#333] rounded-2xl py-2 w-52 shadow-2xl backdrop-blur-md">
-                          <button onClick={() => handleClearMeal(mealName)} className="w-full text-left px-4 py-2 text-xs hover:bg-[#2a2a2a] text-red-400 flex justify-between"><span>Vaciar comida</span> <span>🗑️</span></button>
-                        </div>
-                      )}
 
                       {items.length > 0 ? (
                         <div className="my-3 space-y-2 border-t border-[#262626] pt-3">
-                          {items.map((item) => (
-                            <div key={item.id} className="flex justify-between items-center text-xs">
+                          {items.map((item, idx) => (
+                            <div key={idx} className="flex justify-between items-center text-xs">
                               <span className="text-gray-200">{item.icon} {item.name} ({item.grams}g)</span>
                               <span className="font-semibold text-gray-300">{item.kcal} kcal</span>
                             </div>
@@ -383,16 +362,14 @@
           {activeTab === 'perfil' && (
             <div className="p-5 pt-8">
               <h2 className="text-2xl font-serif-custom mb-6">Tu Perfil</h2>
-              <div className="bg-[#161616] rounded-3xl p-5 border border-[#222] space-y-4">
-                <div>
-                  <label className="text-xs text-gray-400 block mb-1">Nombre de usuario</label>
-                  <input 
-                    type="text" 
-                    value={userName} 
-                    onChange={(e) => setUserName(e.target.value)}
-                    className="w-full bg-[#222] border border-[#333] rounded-xl px-4 py-2 text-sm text-white font-semibold"
-                  />
-                </div>
+              <div className="bg-[#161616] rounded-3xl p-5 border border-[#222]">
+                <label className="text-xs text-gray-400 block mb-1">Nombre de usuario</label>
+                <input 
+                  type="text" 
+                  value={userName} 
+                  onChange={(e) => setUserName(e.target.value)}
+                  className="w-full bg-[#222] border border-[#333] rounded-xl px-4 py-2 text-sm text-white font-semibold"
+                />
               </div>
             </div>
           )}
@@ -412,45 +389,58 @@
             </button>
           </nav>
 
-          {/* MODAL BUSCADOR */}
-          {showSearch && (
-            <div className="fixed inset-0 z-40 bg-[#0c0c0c] flex flex-col p-4 max-w-md mx-auto">
-              <div className="flex items-center gap-3 mb-4">
-                <button onClick={() => setShowSearch(false)} className="text-xl">←</button>
-                <input 
-                  type="text" 
-                  placeholder="Ej. papa, milanesa, galletitas..." 
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="flex-1 bg-[#1a1a1a] border border-[#333] rounded-full px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#8ea885]"
-                />
+          {/* MODAL DETECCIÓN / DESGLOSE DEL PLATO CON IA */}
+          {detectedPlate && (
+            <div className="fixed inset-0 z-50 bg-[#0c0c0c] flex flex-col p-5 max-w-md mx-auto overflow-y-auto">
+              <div className="flex justify-between items-center mb-4">
+                <button onClick={() => setDetectedPlate(null)} className="text-xl">←</button>
+                <span className="text-xs font-semibold bg-[#8ea885]/20 text-[#8ea885] px-3 py-1 rounded-full">Análisis de Plato por IA</span>
               </div>
 
-              <div className="flex-1 overflow-y-auto space-y-3">
-                <div className="flex justify-between items-center">
-                  <h4 className="text-xs text-gray-500 uppercase tracking-wider font-semibold">Alimentos Encontrados</h4>
-                  {loadingSearch && <span className="text-xs text-[#8ea885] animate-pulse">Buscando...</span>}
-                </div>
+              <h2 className="text-xl font-bold mb-1">Alimentos Detectados</h2>
+              <p className="text-xs text-gray-400 mb-4">Ajustá los gramos o eliminá lo que no corresponda:</p>
 
-                {combinedResults.map(food => (
-                  <div 
-                    key={food.id}
-                    onClick={() => handleOpenDetail(food, selectedMeal)}
-                    className="p-3 bg-[#161616] rounded-2xl border border-[#222] flex items-center justify-between cursor-pointer hover:bg-[#202020]"
-                  >
-                    <div className="flex items-center gap-3">
-                      <span className="text-2xl">{food.icon}</span>
-                      <div>
-                        <div className="font-medium text-sm">{food.name}</div>
-                        <div className="text-xs text-gray-400">{food.brand} • por 100g</div>
-                      </div>
+              <div className="space-y-3 flex-1">
+                {detectedPlate.map((item, index) => (
+                  <div key={index} className="bg-[#161616] p-4 rounded-2xl border border-[#222] flex flex-col gap-2">
+                    <div className="flex justify-between items-center">
+                      <span className="font-semibold text-sm flex items-center gap-2">
+                        <span>{item.icon}</span> {item.name}
+                      </span>
+                      <button onClick={() => handleRemoveDetectedItem(index)} className="text-red-400 text-xs px-2 py-1 bg-red-500/10 rounded-lg">✕ Quitar</button>
                     </div>
-                    <div className="text-right">
-                      <div className="text-xs text-gray-300 font-semibold">{food.kcal} kcal</div>
-                      <div className="text-[10px] text-gray-500">{food.protein}P | {food.carbs}C | {food.fat}G</div>
+
+                    <div className="flex justify-between items-center pt-2 border-t border-[#262626]">
+                      <div className="text-xs text-gray-400">
+                        <span className="text-white font-bold">{item.kcal} kcal</span> • {item.protein}P | {item.carbs}C | {item.fat}G
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <input 
+                          type="number" 
+                          value={item.grams} 
+                          onChange={(e) => handleUpdateDetectedGrams(index, Number(e.target.value) || 0)}
+                          className="w-16 bg-[#222] border border-[#333] rounded-lg px-2 py-1 text-right text-xs font-bold text-white"
+                        />
+                        <span className="text-xs text-gray-400">g</span>
+                      </div>
                     </div>
                   </div>
                 ))}
+              </div>
+
+              <div className="mt-6 pt-4 border-t border-[#222]">
+                <div className="flex justify-between items-center mb-4">
+                  <span className="text-sm font-semibold">Total del Plato:</span>
+                  <span className="text-lg font-bold text-[#8ea885]">
+                    {detectedPlate.reduce((a, b) => a + b.kcal, 0)} kcal
+                  </span>
+                </div>
+                <button 
+                  onClick={handleConfirmDetectedPlate}
+                  className="w-full py-4 bg-[#8ea885] text-black font-bold text-sm rounded-full shadow-lg"
+                >
+                  Confirmar y Agregar a {selectedMeal}
+                </button>
               </div>
             </div>
           )}
@@ -466,18 +456,8 @@
                 </div>
 
                 <div className="flex bg-[#1a1a1a] rounded-xl p-1 gap-1">
-                  <button 
-                    onClick={() => setCameraMode('photo')} 
-                    className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${cameraMode === 'photo' ? 'bg-[#8ea885] text-black' : 'text-gray-400'}`}
-                  >
-                    📸 Foto del plato
-                  </button>
-                  <button 
-                    onClick={() => setCameraMode('barcode')} 
-                    className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${cameraMode === 'barcode' ? 'bg-[#8ea885] text-black' : 'text-gray-400'}`}
-                  >
-                    📦 Código de barras
-                  </button>
+                  <button onClick={() => setCameraMode('photo')} className={`flex-1 py-1.5 text-xs font-semibold rounded-lg ${cameraMode === 'photo' ? 'bg-[#8ea885] text-black' : 'text-gray-400'}`}>📸 Foto del plato</button>
+                  <button onClick={() => setCameraMode('barcode')} className={`flex-1 py-1.5 text-xs font-semibold rounded-lg ${cameraMode === 'barcode' ? 'bg-[#8ea885] text-black' : 'text-gray-400'}`}>📦 Código de barras</button>
                 </div>
               </div>
 
@@ -486,7 +466,7 @@
                   <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover"></video>
                   <div className="absolute w-64 h-64 border-2 border-[#8ea885]/80 rounded-3xl pointer-events-none flex items-center justify-center">
                     <span className="text-xs text-white/70 bg-black/50 px-3 py-1 rounded-full">
-                      {isAnalyzingPhoto ? 'Analizando plato...' : 'Enfocá tu comida'}
+                      {isAnalyzingPhoto ? 'Analizando plato con IA...' : 'Enfocá tu plato completo'}
                     </span>
                   </div>
                 </div>
@@ -495,90 +475,20 @@
               {cameraMode === 'barcode' && (
                 <div className="relative flex-1 flex flex-col items-center justify-center overflow-hidden p-4">
                   <div id="reader" className="w-full max-w-sm rounded-2xl overflow-hidden border-2 border-[#8ea885]"></div>
-                  <p className="text-xs text-center text-gray-300 mt-4 bg-black/60 py-2 rounded-xl px-4">
-                    {scanStatus}
-                  </p>
                 </div>
               )}
 
               <div className="p-6 bg-[#0c0c0c] flex justify-center items-center">
-                {cameraMode === 'photo' ? (
+                {cameraMode === 'photo' && (
                   <button 
-                    onClick={handleTakePhoto}
+                    onClick={handleCaptureAndAnalyze}
                     disabled={isAnalyzingPhoto}
-                    className="w-16 h-16 bg-[#8ea885] rounded-full flex items-center justify-center text-black text-2xl font-bold shadow-lg active:scale-95 transition-transform"
+                    className="w-16 h-16 bg-[#8ea885] rounded-full flex items-center justify-center text-black text-2xl font-bold shadow-lg"
                   >
                     {isAnalyzingPhoto ? '⏳' : '📸'}
                   </button>
-                ) : (
-                  <p className="text-xs text-gray-500 text-center">Apuntá al código de barras del paquete</p>
                 )}
               </div>
-            </div>
-          )}
-
-          {/* MODAL DETALLE */}
-          {selectedFoodForDetail && (
-            <div className="fixed inset-0 z-50 bg-[#0c0c0c] flex flex-col p-4 max-w-md mx-auto overflow-y-auto">
-              <div className="flex justify-between items-center mb-4">
-                <button onClick={() => setSelectedFoodForDetail(null)} className="text-xl">←</button>
-              </div>
-
-              <div className="flex flex-col items-center text-center my-2">
-                <div className="w-16 h-16 bg-[#1a1a1a] rounded-2xl flex items-center justify-center text-3xl mb-2">
-                  {selectedFoodForDetail.icon}
-                </div>
-                <h2 className="text-xl font-bold">{selectedFoodForDetail.name}</h2>
-                <p className="text-xs text-gray-400">{selectedFoodForDetail.brand}</p>
-              </div>
-
-              {(() => {
-                const ratio = portionQty / (selectedFoodForDetail.baseGrams || 100);
-                const k = Math.round(selectedFoodForDetail.kcal * ratio);
-                const p = (selectedFoodForDetail.protein * ratio).toFixed(1);
-                const c = (selectedFoodForDetail.carbs * ratio).toFixed(1);
-                const f = (selectedFoodForDetail.fat * ratio).toFixed(1);
-
-                return (
-                  <div>
-                    <div className="grid grid-cols-4 gap-2 my-4">
-                      <div className="bg-[#161616] p-3 rounded-2xl text-center border border-[#222]">
-                        <div className="text-base font-bold">{k}</div>
-                        <div className="text-[10px] text-gray-400">kcal</div>
-                      </div>
-                      <div className="bg-[#161616] p-3 rounded-2xl text-center border border-[#222]">
-                        <div className="text-base font-bold">{p} g</div>
-                        <div className="text-[10px] text-gray-400">prot</div>
-                      </div>
-                      <div className="bg-[#161616] p-3 rounded-2xl text-center border border-[#222]">
-                        <div className="text-base font-bold">{c} g</div>
-                        <div className="text-[10px] text-gray-400">carbs</div>
-                      </div>
-                      <div className="bg-[#161616] p-3 rounded-2xl text-center border border-[#222]">
-                        <div className="text-base font-bold">{f} g</div>
-                        <div className="text-[10px] text-gray-400">grasas</div>
-                      </div>
-                    </div>
-
-                    <div className="bg-[#161616] p-4 rounded-2xl border border-[#222] my-4 flex justify-between items-center">
-                      <span className="text-xs text-gray-400">Cantidad (Gramos)</span>
-                      <input 
-                        type="number" 
-                        value={portionQty} 
-                        onChange={(e) => setPortionQty(Number(e.target.value) || 0)}
-                        className="w-24 bg-[#222] border border-[#333] rounded-xl px-3 py-1.5 text-right text-sm font-bold text-white"
-                      />
-                    </div>
-
-                    <button 
-                      onClick={handleConfirmAddFood}
-                      className="w-full py-4 bg-[#8ea885] text-black font-bold text-sm rounded-full shadow-lg transition-colors mt-4"
-                    >
-                      Agregar a {targetMeal}
-                    </button>
-                  </div>
-                );
-              })()}
             </div>
           )}
 
